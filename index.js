@@ -388,8 +388,8 @@ client.on('message_create', async msg => {
         
         const contact = await msg.getContact();
         const chat  = await msg.getChat();
-        const msgTo = chat.name;
-        const contactPushName = contact.pushname;
+        const msgTo = chat.name; 
+        const contactPushName = contact.pushname; 
         const contactNumber = contact.number;
         console.log('\x1b[90m{'+ `\x1b[31m[${contactNumber} : \x1b[34m${contactPushName}\x1b[31m]`+ `\x1b[90m --to-->` + ` \x1b[36m${msgTo}\x1b[31m `+`\x1b[90m:`+` \x1b[32m${msg.body}\x1b[31m`+'\x1b[90m}');
         if(msg.body === "ping"){
