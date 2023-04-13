@@ -1,11 +1,9 @@
-
-
-
-const dotenv = require("dotenv").config();
-const qrcode = require('qrcode-terminal');
-const fs = require('fs');// https://nodejs.org/api/fs.html
 const { Client, LocalAuth } = require('whatsapp-web.js');// https://docs.wwebjs.dev/Chat.html 
 const {Configuration, OpenAIApi} = require("openai");// https://platform.openai.com/docs/api-reference/introduction
+const dotenv = require("dotenv").config();
+const qrcode = require('qrcode-terminal');
+
+const fs = require('fs');// https://nodejs.org/api/fs.html
 const axios = require('axios');
 const path = require('path');
 const FormData = require('form-data');
@@ -26,7 +24,10 @@ const configuration = new Configuration({
     apiKey : process.env.OPENAI_API_KEY,
 });
 const client = new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({
+        dataPath: '../'
+    }),
+    
 });
 
 /**
@@ -191,14 +192,6 @@ function deleteFiles(){
         console.log("No se pudo borrar los archivos");
     }
 }
-/*
-axios.post("https://api.openai.com/v1/audio/transcriptions", formData,{
-    headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "multipart/form-data; boundry=${formData._boundary}",
-    }
-})*/
-// Text to speech function
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
