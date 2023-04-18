@@ -1,9 +1,10 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');// https://docs.wwebjs.dev/Chat.html 
-const {Configuration, OpenAIApi} = require("openai");// https://platform.openai.com/docs/api-reference/introduction
+
+
 const dotenv = require("dotenv").config();
 const qrcode = require('qrcode-terminal');
-
 const fs = require('fs');// https://nodejs.org/api/fs.html
+const { Client, LocalAuth } = require('whatsapp-web.js');// https://docs.wwebjs.dev/Chat.html 
+const {Configuration, OpenAIApi} = require("openai");// https://platform.openai.com/docs/api-reference/introduction
 const axios = require('axios');
 const path = require('path');
 const FormData = require('form-data');
@@ -11,27 +12,22 @@ const { exec } = require('child_process');
 const { rejects } = require('assert');
 const async = require('async');
 
-//const process = require('node:process');
-
-
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-// mapa de grupos y mensajes
-const messages = {};
+/* ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
 
 const configuration = new Configuration({
     apiKey : process.env.OPENAI_API_KEY,
 });
+
+const openai = new OpenAIApi(configuration);
+/**
+ * Crea el cliente de whatsapp (crea el bot)
+ */
 const client = new Client({
-    authStrategy: new LocalAuth({
-        dataPath: '../'
-    }),
-    
+    authStrategy: new LocalAuth(),
 });
 
 /**
- * funcione que genera el qr para escanaear con el celular. El celular que se usa va a ser el BOT
+ * funcion que genera el qr para escanaear con el celular. El celular que se usa va a ser el BOT
 */
 client.on('qr', qr => {
     qrcode.generate(qr, { small: true });
@@ -46,7 +42,16 @@ client.on('ready', () => {
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
-// This function handles the missing media in the chat by retrieving messages from the chat until the media is available
+
+/**
+ * Busca el mensaje que contiene el audio y lo descarga (This function handles the
+ * missing media in the chat by retrieving messages from the chat until the media is available)
+ * @param {qmsg} quotedMsg 
+ * @param {int} messageId 
+ * @param {chat} chat 
+ * @param {int} maxRetries 
+ * @returns 
+ */
 async function downloadQuotedMedia(quotedMsg, messageId, chat, maxRetries = 5) {
 	let attachmentData = null;
 	let counter = 10;
@@ -74,6 +79,10 @@ async function downloadQuotedMedia(quotedMsg, messageId, chat, maxRetries = 5) {
 	return attachmentData;
 
 }
+/**
+ * Crear los archivos de audio y de texto
+ * @param {string} base64String 
+ */
 async function createFiles(base64String){
     const binaryString = Buffer.from(base64String, 'base64').toString('binary');
     const pcmData = Buffer.from(binaryString, 'binary');
@@ -105,6 +114,11 @@ async function createFiles(base64String){
 
     
 }
+/**
+ * Transcribe el audio a texto y lo devuelve
+ * @param {msg} msg 
+ * @returns 
+ */
 async function SpeechToTextTranscript(msg) {
     try {
         msg.react('☠️');
@@ -137,9 +151,17 @@ async function SpeechToTextTranscript(msg) {
         
         return transcription;
     } catch (err) {
+        deleteFiles();
         console.error(err);
     }
 }
+
+/**
+ * Se encarga de recibir el mensaje quoted, despues hace chequeos de si es un audio, 
+ * se manda a descargar el audio, crea los archivos de audio, hace el transcript y lo devuelve
+ * @param {msg} message 
+ * @returns 
+ */
 async function getTranscript(message){
 
     const chat = await message.getChat();
@@ -170,7 +192,9 @@ async function getTranscript(message){
     console.log("ans: " + ans);
     return ans;
 }
-
+/**
+ * Borra los archivos de audio 
+ */
 function deleteFiles(){
     try{
         const file1 = 'in.ogg';
@@ -194,14 +218,30 @@ function deleteFiles(){
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
-
+async function runCompletion(message, speciality){
+    try{
+        const prompting = speciality + message;
+        const completion = await openai.createCompletion({
+            engine: "text-davinci-003",
+            prompt: prompting,
+            maxTokens: 100,
+            temperature: 0.9
+        });
+        return completion.data.choices[0].text;
+    }
+    catch(err){
+        console.log(err);
+    }
+}
 /**
  * Funcion que envia el mensaje a la api de open ai, y luego recibe el mensaje de chatGPT 
  * @param {string} message mensaje que se envia a la api de open ai
  * @param {string} speciality que tipo de persona es el ai (asistente, ruso drogado, etc)
  * @returns el mensaje de chatGPT.
  */
-async function runCompletion(message, speciality){
+async function runCompletion2(message, speciality){
+    console.log("Hola\n");
+
     try {
         // send question to open ai
         const messages = [
@@ -232,7 +272,6 @@ async function runCompletion(message, speciality){
         if(res.error){
             console.error(res)
         }
-
         return res.choices[0].message.content.trim();
         
 
@@ -247,105 +286,90 @@ function MySearchOptions(limit, fromMe) {
     this.limit = limit;
     this.fromMe = fromMe;
 }
-  
 
-async function print(msg, amount){
+/**
+ * Manda un mensaje privado a un contacto con el id contactID
+ * @param {number} contactID 
+ * @param {msg} message 
+ */
+async function sendPrivateMessage(contactID, message) {
+    try {
+      const chat = await client.getChatById(contactID);
+      await chat.sendMessage(message);
+    } catch (error) {
+      console.error(error);
+    }
+}
+/**
+ * Devuelve una conversacion entera con los ultimos amount mensajes de un chat 
+ * @param {number} amount 
+ * @param {chat} fromChat 
+ * @returns 
+ */
+async function getMessageLog( amount, fromChat){
     try{
-        const mensajes = await fetchamount(msg,amount);
+        const mensajes = await fetchAmount(amount, fromChat);
         let linea = new Array(amount);
         var contacto;
-        var nombre
+        var nombre;
         var texto;
+        var messageBeingResponded;
+        var contactBeingResponded;
+        var nameBeingResponded;
         for (let i = 0; i < mensajes.length; i++) {
             contacto=await mensajes[i].getContact();
             nombre=contacto.name;
             texto=mensajes[i].body;
-            linea[i]=nombre + ": " + texto ;
+            if(mensajes[i].hasQuotedMsg){ // para ver si esta respondiendo a un mensaje (se podrian hacer cosas interesantes con esto con los ids de los mensajes asi hay referencia a cual mensaje se responde) 
+                messageBeingResponded = await mensajes[i].getQuotedMessage();
+                contactBeingResponded = await messageBeingResponded.getContact(); 
+                nameBeingResponded = contactBeingResponded.name;
+                linea[i] = "[" + nombre + "]" +" respondiendo a " + "[" + nameBeingResponded + "]" + ": " + texto ;
+            }
+            else{
+                linea[i] = "[" + nombre + "]"  + ": " + texto ;
+            } 
         }
         //const concatMessages = mensajes.map(mensaje =>  mensaje.author + ": " +mensaje.body).join('\n');
         return linea.join("\n");
     }
     catch(err){
-        console.log('print error: ' + err);
+        console.log('getMessageLog Error: ' + err.message);
     }
 }
-
+/**
+ * Devuelve un array de objetos message de un chat hasta amount times
+ * @param {number} amount 
+ * @param {chat} fromChat 
+ * @returns 
+ */
 //busca cierto amount de messages de ese chat
-async function fetchamount(msg, amount){
-    const chat = await msg.getChat();
-    let plusOne=amount;plusOne++; //suma un mensaje para despues sacar el ultimo
+async function fetchAmount( amount, fromChat){
+    let plusOne = amount;
+    plusOne++; //suma un mensaje para despues sacar el ultimo
     try{
         const options = new MySearchOptions(plusOne, undefined);
-        const mensajes = await chat.fetchMessages(options);
+        console.log(amount + " " + fromChat.name);
+        const mensajes = await fromChat.fetchMessages(options);
         mensajes.splice(-1); //saca el ultimo mensaje (el que pidio el fetch o lo que sea)
-        return mensajes;
+        return mensajes; // devuelve un conjunto de objetos message
     }
     catch(err){
         console.log('fetch error: ' + err);
     }
     
 }
-
-
-async function saveMessagesSUMMA(msg){
-    const chat = await msg.getChat();
-    const contact = await msg.getContact();
-    try{
-        const groupName = chat.name;
-        const message = {
-            from: contact.pushname,
-            text: msg.body,
-            timestamp: Date.now()
-        };
-        if (!messages[groupName]) {
-            messages[groupName] = [message];
-        } else {
-            messages[groupName].push(message);
-            if (messages[groupName].length > 200) {
-                messages[groupName].shift();
-            }
+/**
+ * Devuelve el chat con el nombre chatName  
+ * @param {string} chatName 
+ * @returns 
+ */
+async function getChatByName(chatName) {
+    const chats = await client.getChats();
+    for (const chat of chats) {
+        if (chat.name === chatName) {
+            return chat;
         }
-    }
-    catch(err){
-        console.log('save SUMMA ERR: ' + err);
-    }
-}
-
-async function sendPrivateMessage(contact, message) {
-    try {
-      const chat = await client.getChatById(contact);
-      await chat.sendMessage(message);
-    } catch (error) {
-      console.error(error);
-    }
-  }
-  
-async function createSummarySUMMA(msg){
-    const chat = await msg.getChat();
-    try{
-        createMeSummarySUMMA(msg, chat.name);
-    }
-    catch(err){
-        console.log('createSUMMA ERR: ' + err);
-    }
-    
-}
-async function createMeSummarySUMMA(msg, groupName){ 
-    try{
-        const sender = await msg.getContact();
-        const senderId = sender.id._serialized;
-
-        const chatMessages = messages[groupName];
-        if (chatMessages) {
-
-            const gptPreambulo = 'Quiero que resumas la conversación que pongo a continuación manteniendo quien dijo que y que no se repitan las frases, mantenelo bien corto, menos de 100 palabras salteate detalles irrelevantes. También conta la cantidad de veces que alguien mandó mensajes por nombre de la gente que aprece asi "[nombre]" Y en un pequeño parrafo aparte poneme quien la cantidad de mensajes que mandó cada uno así y su humor así: [nombre] - numero de mensajes {humor}:\n';
-            const chatLog = chatMessages.map(message => '[' + message.from +']' + ': ' + message.text).join('\n');
-            //runCompletion(gptSum + chatLog, "Sos un asistente que resumen conversaciones.").then(result => msg.contact.sendMessage(result));
-            runCompletion(gptPreambulo + chatLog, "Sos un asistente que resume conversaciones.").then(result => sendPrivateMessage(senderId, result));      
-        }
-    }
-    catch(err){
-        console.log('createSUMMA ERR: ' + err);
     }
 }
 
@@ -369,39 +393,86 @@ const queue = async.queue(async (msg, callback) => {
     callback();
   }, 1);
 
+/**
+ * Devuelve el primer string de un mensaje.body
+ * @param {string} str 
+ * @returns 
+ */
+
 function getFirstWord(str) {
     const words = str.split(" ");
     const firstWord = words[0];
     const restOfStr = words.slice(1).join(" ");
     return [firstWord, restOfStr];
 }
+
+/**
+ * Crea resumen de chat donde fue mandado msg
+ * @param {msg} msg 
+ */
+async function createSummaryWrapper(msg){
+    const chat = await msg.getChat();
+    await createSummary(200, msg,chat);
+}
+/**
+ * Crea resumen de chat de fromChat
+ * @param {msg} msg 
+ * @param {chat} fromChat 
+ */
+async function createSummary(amount, msg, fromChat){
+    const sender = await msg.getContact();
+    const senderId = sender.id._serialized;
+    console.log(amount);
+    const chatLog = await getMessageLog(amount, fromChat);
+    const gptPreambulo = 'Quiero que resumas la conversación que pongo a continuación manteniendo quien dijo que y que no se repitan las frases, mantenelo bien corto, menos de 100 palabras salteate detalles irrelevantes. También conta la cantidad de veces que alguien mandó mensajes por nombre de la gente que aprece asi "[nombre]" Y en un pequeño parrafo aparte poneme quien la cantidad de mensajes que mandó cada uno así y su humor así: [nombre] - numero de mensajes {humor}:\n';
+    runCompletion(gptPreambulo + chatLog, "Sos un asistente que resume conversaciones.").then(result => sendPrivateMessage(senderId, result));      
+
+}
+/**
+ * Decide que hacer con el mensaje
+ * @param {msg} msg 
+ */
 async function handleMessage(msg){
     const [firstWord, restOfStr] = getFirstWord(msg.body);
 
     if(restOfStr){ // si tiene otro parametro ademas de la primera  palabra
         switch (firstWord.toLowerCase()) {
             case 'resumi':
-                const chatName = restOfStr;
-                if(chatName){
+                const fromChat = await getChatByName(restOfStr);
+                if(fromChat){
                     msg.react('👍');
-                    createMeSummarySUMMA(msg, chatName);
+                    createSummary(200, msg, fromChat);
+                }
+                else{
+                    msg.reply("Invalid input chat name, must be called this way: resumi [chatName]");
                 }
                 break;
             case 'gpt':
                 msg.react('👍');
                 runCompletion(restOfStr, "Sos un asistente que responde con simpleza y es muy inteligente").then(result => msg.reply(result));
                 break;
-            case 'print':
-                msg.react('👍');
-                const [secondWord,restOfRestOfStr]=getFirstWord(restOfStr)
-                var cantidad=undefined;
-                if (!isNaN(secondWord)) {
-                    cantidad=secondWord;
+            case 'log':
+                const chat = await msg.getChat();
+                const cantidad=Number(restOfStr);
+                if (isNaN(cantidad)) {
+                    msg.reply("Invalid input number, must be called this way: log [number]");
+                } else {
+                    msg.react('👍');
+                    const reply = await getMessageLog(cantidad, chat);
+                    msg.reply("MessLog: " + reply);
                 }
-                const reply = await print(msg, cantidad);
-                msg.reply(reply);
-                    break;
-    
+                break;
+            case 'summa':
+                const currChat = await msg.getChat();
+                const cantidadMsgs=Number(restOfStr);
+                if (isNaN(cantidadMsgs)) {
+                    msg.reply("Invalid input number, must be called this way: log [number]");
+                } else {
+                    msg.react('👍');
+                    await createSummary(cantidadMsgs, msg, currChat);
+                }
+                break;
+
             default:
                 break;
         }
@@ -410,28 +481,50 @@ async function handleMessage(msg){
         switch (msg.body.toLowerCase()) {
             case 'summa':
                 msg.react('👍');
-                await createSummarySUMMA(msg);
+                await createSummaryWrapper(msg);
                 break;
             case 'texto':
                 if(msg.hasQuotedMsg){
                     queue.push(msg);
                 }
                 break;
-            case 'pipe':
-                msg.react('👍');
-                const reply = await createSummaryPIPE(msg, 10);
-                msg.reply(reply);
-                break;
-                
-            default:
-                if (msg.body.toLowerCase() !== 'summa') {
-                    await saveMessagesSUMMA(msg);
+            case '!groupinfo':
+                let chat = await msg.getChat();
+                if (chat.isGroup) {
+                    msg.reply(`
+                        *Group Details*
+Name: ${chat.name}
+Description: ${chat.description}
+Created At: ${chat.createdAt.toString()}
+Created By: ${chat.owner.user}
+Participant count: ${chat.participants.length}
+                    `);
+                } else {
+                    msg.reply('This command can only be used in a group!');
                 }
+                break;
+            case '!help':
+                msg.reply(`
+            *Comandos*
+*!groupinfo*:info del grupo
+*summa*:resumen del grupo
+*summa [n]*:resume n msg's 
+*gpt [consulta]*:responde gpt
+*texto*:traduce audio a texto
+*log [n]*:muestra n msg's
+*resumi [chat]*:resume chat
+                `);
+                break;
+            default:
                 break;
         }
     }
     
 }
+/**
+ * imprime en consola para que sea mas facil de leer
+ * @param {msg} msg 
+ */
 async function printFormattedMsg(msg){
     const contact = await msg.getContact();
     const chat  = await msg.getChat();
@@ -455,3 +548,10 @@ client.on('message' , async msg => {
 
 
 client.initialize();
+
+/**
+ * TODO: 
+ * * chatGPT literalmente en un grupo privado (con todos los textos )
+ * * presets de conversadores de gpt
+ * * comando help
+ */
