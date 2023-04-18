@@ -231,6 +231,8 @@ async function runCompletion(message, speciality){
     }
     catch(err){
         console.log(err);
+        console.log('falla el runCompletion')
+        console.log(process.env.OPENAI_API_KEY)
     }
 }
 /**
@@ -277,6 +279,7 @@ async function runCompletion2(message, speciality){
 
     } catch (error) {
         console.log(`ERR: ${error}`);
+        console.log('falla el runcompletion2')
     }
     
 }
@@ -425,7 +428,7 @@ async function createSummary(amount, msg, fromChat){
     console.log(amount);
     const chatLog = await getMessageLog(amount, fromChat);
     const gptPreambulo = 'Quiero que resumas la conversación que pongo a continuación manteniendo quien dijo que y que no se repitan las frases, mantenelo bien corto, menos de 100 palabras salteate detalles irrelevantes. También conta la cantidad de veces que alguien mandó mensajes por nombre de la gente que aprece asi "[nombre]" Y en un pequeño parrafo aparte poneme quien la cantidad de mensajes que mandó cada uno así y su humor así: [nombre] - numero de mensajes {humor}:\n';
-    runCompletion(gptPreambulo + chatLog, "Sos un asistente que resume conversaciones.").then(result => sendPrivateMessage(senderId, result));      
+    runCompletion2(gptPreambulo + chatLog, "Sos un asistente que resume conversaciones.").then(result => sendPrivateMessage(senderId, result));      
 
 }
 /**
