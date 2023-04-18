@@ -387,7 +387,7 @@ const queue = async.queue(async (msg, callback) => {
                 break;
         case "audiogpt":
             msg.react('👍');
-            runCompletion(transcript, "Sos un asistente que responde con simpleza y es muy inteligente").then(result => msg.reply(result));      
+            runCompletion2(transcript, "Sos un asistente que responde con simpleza y es muy inteligente").then(result => msg.reply(result));      
             break;
         }
     }
@@ -452,7 +452,7 @@ async function handleMessage(msg){
                 break;
             case 'gpt':
                 msg.react('👍');
-                runCompletion(restOfStr, "Sos un asistente que responde con simpleza y es muy inteligente").then(result => msg.reply(result));
+                runCompletion2(restOfStr, "Sos un asistente que responde con simpleza y es muy inteligente").then(result => msg.reply(result));
                 break;
             case 'log':
                 const chat = await msg.getChat();
@@ -557,4 +557,6 @@ client.initialize();
  * * chatGPT literalmente en un grupo privado (con todos los textos )
  * * presets de conversadores de gpt
  * * comando help
+ * * ver como implementar reminders, o exportar reminders a google calendar
+ * * 
  */
