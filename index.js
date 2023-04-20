@@ -1,4 +1,8 @@
-
+const express = require('express');
+const app = express();
+const port = 3000;
+app.listen(port, () => console.log(`Listening on port ${port}`));
+app.get('/', (req, res) => res.send('Hello World!'));   // http://localhost:3000/
 
 const dotenv = require("dotenv").config();
 const qrcode = require('qrcode-terminal');
@@ -489,7 +493,7 @@ async function handleMessage(msg){
                 break;
             case 'log':
                 const chat = await msg.getChat();
-                const cantidad=Number(restOfStr);
+                const cantidad = Number(restOfStr);
                 if (isNaN(cantidad)) {
                     msg.reply("Invalid input number, must be called this way: log [number]");
                 } else {
@@ -502,7 +506,7 @@ async function handleMessage(msg){
                 const currChat = await msg.getChat();
                 const cantidadMsgs=Number(restOfStr);
                 if (isNaN(cantidadMsgs)) {
-                    msg.reply("Invalid input number, must be called this way: log [number]");
+                    msg.reply("Invalid input number, must be called this way: summa [number]");
                 } else {
                     msg.react('👍');
                     await createSummary(cantidadMsgs, msg, currChat);
@@ -511,7 +515,7 @@ async function handleMessage(msg){
             case 'atou':
                 let ars = Number(restOfStr);
                 if (isNaN(ars)) {
-                    msg.reply("Invalid input number, must be called this way: utoa [number]");
+                    msg.reply("Invalid input number, must be called this way: atou [number]");
                 } else {
                     msg.react('👍');
                     let dolares = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
@@ -526,7 +530,7 @@ async function handleMessage(msg){
             case 'utoa':
                 let usd = Number(restOfStr);
                 if (isNaN(usd)) {
-                    msg.reply("Invalid input number, must be called this way: utod [number]");
+                    msg.reply("Invalid input number, must be called this way: utoa [number]");
                 } else {
                     msg.react('👍');
                     let dolares = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
