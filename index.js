@@ -3,7 +3,7 @@
 const dotenv = require("dotenv").config();
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');// https://nodejs.org/api/fs.html
-const { Client, LocalAuth } = require('whatsapp-web.js');// https://docs.wwebjs.dev/Chat.html 
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');// https://docs.wwebjs.dev/Chat.html 
 const {Configuration, OpenAIApi} = require("openai");// https://platform.openai.com/docs/api-reference/introduction
 const axios = require('axios');
 const path = require('path');
@@ -17,8 +17,8 @@ const async = require('async');
 const configuration = new Configuration({
     apiKey : process.env.OPENAI_API_KEY,
 });
-
 const openai = new OpenAIApi(configuration);
+
 /**
  * Crea el cliente de whatsapp (crea el bot)
  */
@@ -242,8 +242,6 @@ async function runCompletion(message, speciality){
  * @returns el mensaje de chatGPT.
  */
 async function runCompletion2(message, speciality){
-    console.log("Hola\n");
-
     try {
         // send question to open ai
         const messages = [
@@ -431,6 +429,32 @@ async function createSummary(amount, msg, fromChat){
     runCompletion2(gptPreambulo + chatLog, "Sos un asistente que resume conversaciones.").then(result => sendPrivateMessage(senderId, result));      
 
 }
+
+async function createImage(prompto){
+    const prompt = prompto + " "; 
+    const result = await openai.createImage({
+        prompt, 
+        n: 1,
+        size: '256x256'
+
+    });
+    const url = result.data.data[0].url;
+    console.log(url);
+    const img = await fetch(url);
+    const blob = await img.blob();
+    const buffer  = Buffer.from(await blob.arrayBuffer());
+    fs.writeFileSync('image.png', buffer);
+}
+
+function deleteFile(fileToDelete){
+    fs.unlink(fileToDelete, (err) => {
+        if (err) {
+          console.error(err)
+          return
+        }
+      })
+}
+
 /**
  * Decide que hacer con el mensaje
  * @param {msg} msg 
@@ -440,6 +464,15 @@ async function handleMessage(msg){
 
     if(restOfStr){ // si tiene otro parametro ademas de la primera  palabra
         switch (firstWord.toLowerCase()) {
+            case 'img':
+                msg.react('👍');
+                await createImage(restOfStr);
+                
+                const imgMedia = MessageMedia.fromFilePath('image.png');
+                msg.reply(imgMedia);
+                deleteFile('image.png');
+
+                break;
             case 'resumi':
                 const fromChat = await getChatByName(restOfStr);
                 if(fromChat){
@@ -475,7 +508,36 @@ async function handleMessage(msg){
                     await createSummary(cantidadMsgs, msg, currChat);
                 }
                 break;
-
+            case 'atou':
+                let ars = Number(restOfStr);
+                if (isNaN(ars)) {
+                    msg.reply("Invalid input number, must be called this way: utoa [number]");
+                } else {
+                    msg.react('👍');
+                    let dolares = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
+                    let compra = parseFloat(dolares.data[1].casa.compra);
+                    let venta = parseFloat(dolares.data[1].casa.venta);
+                    let dolarblue = (compra + venta) / 2;
+                    let arsToUsd = ars / dolarblue;
+                    arsToUsd = parseFloat(arsToUsd.toFixed(2));
+                    msg.reply("ARS to USD: U$D" + arsToUsd);
+                }
+                break;
+            case 'utoa':
+                let usd = Number(restOfStr);
+                if (isNaN(usd)) {
+                    msg.reply("Invalid input number, must be called this way: utod [number]");
+                } else {
+                    msg.react('👍');
+                    let dolares = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
+                    let compra = parseFloat(dolares.data[1].casa.compra);
+                    let venta = parseFloat(dolares.data[1].casa.venta);
+                    let dolarblue = (compra + venta) / 2;
+                    let usdToArs = usd * dolarblue;
+                    usdToArs = parseFloat(usdToArs.toFixed(2));
+                    msg.reply("USD to ARS: AR$" + usdToArs);
+                }
+                break;
             default:
                 break;
         }
@@ -490,6 +552,50 @@ async function handleMessage(msg){
                 if(msg.hasQuotedMsg){
                     queue.push(msg);
                 }
+                break;
+            case 'randomize':
+                let response = await axios.get('https://www.boredapi.com/api/activity');
+                let act = response.data;
+                msg.reply(act.activity);
+                break;
+            case 'dolares':
+                let dolares = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
+                let dolaresData = dolares.data;
+                let dolaresStr = "DOLAR : COMPRA | VENTA\n";
+                dolaresStr += "_____________________________________\n";
+                for (let i = 0; i < dolaresData.length; i++) {
+                    const dolar = dolaresData[i];
+                    dolaresStr += `*${dolar.casa.nombre}* : ${dolar.casa.compra} | ${dolar.casa.venta}\n`;
+                    dolaresStr += "_____________________________________\n";
+                }
+                msg.reply(dolaresStr);
+                break;
+            case 'dolarb':
+                
+                let dolar = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
+                let dolarData = dolar.data[1];
+                msg.reply(`
+                *${dolarData.casa.nombre}*
+_____________________________________            
+Compra: *${dolarData.casa.compra}*         
+_____________________________________            
+Venta: *${dolarData.casa.venta}*       
+_____________________________________            
+
+            `);
+                break;
+            case 'dolaroficial':
+                let dolarOficial = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
+                let dolarOficialData = dolarOficial.data[0];
+                msg.reply(`
+                *${dolarOficialData.casa.nombre}*
+_____________________________________
+Compra: *${dolarOficialData.casa.compra}*
+_____________________________________
+Venta: *${dolarOficialData.casa.venta}*
+_____________________________________
+            
+                `);
                 break;
             case '!groupinfo':
                 let chat = await msg.getChat();
@@ -508,14 +614,38 @@ Participant count: ${chat.participants.length}
                 break;
             case '!help':
                 msg.reply(`
-            *Comandos*
-*!groupinfo*:info del grupo
-*summa*:resumen del grupo
-*summa [n]*:resume n msg's 
-*gpt [consulta]*:responde gpt
-*texto*:traduce audio a texto
-*log [n]*:muestra n msg's
-*resumi [chat]*:resume chat
+                    *Comandos*
+_____________________________________            
+*summa*: resume 200 msg's del chat         
+_____________________________________            
+*summa [n]*: resume n msg's del chat       
+_____________________________________            
+*resumi [chat]*: resume msg's de chat       
+_____________________________________            
+*gpt [consulta]*: responde gpt     
+_____________________________________            
+*texto*: traduce audio a texto     
+_____________________________________            
+*gptaudio*: audio a gpt            
+_____________________________________
+*randomize*: random activity
+_____________________________________
+*log [n]*: muestra n msg's         
+_____________________________________            
+*atou [number]*: ARS to USD
+_____________________________________
+*utoa [number]*: USD to ARS
+_____________________________________
+*dolares*: dolar info
+_____________________________________
+*dolarB*: dolar blue info
+_____________________________________
+*dolaroficial*: dolar oficial info
+_____________________________________
+*!groupinfo*: info del grupo
+_____________________________________
+*!help*: muestra este mensaje
+_____________________________________
                 `);
                 break;
             default:
