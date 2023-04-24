@@ -1,8 +1,3 @@
-const express = require('express');
-const app = express();
-const port = process.env.PORT || 4000;
-app.listen(port, () => console.log(`Listening on port ${port}`));
-app.get('/', (req, res) => res.send('Hello World!'));   // http://localhost:3000/
 
 const dotenv = require("dotenv").config();
 const qrcode = require('qrcode-terminal');
@@ -16,6 +11,7 @@ const { exec } = require('child_process');
 const { rejects } = require('assert');
 const async = require('async');
 const schedule = require('node-schedule'); //para schedule cosas a futuro.
+const moment = require('moment');
 
 /* ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
 
@@ -515,7 +511,7 @@ async function handleMessage(msg){
                 deleteFile('image.png');
 
                 break;
-            case 'resumi':
+            case 'summame':
                 const fromChat = await getChatByName(restOfStr);
                 if(fromChat){
                     msg.react('👍');
@@ -556,9 +552,9 @@ async function handleMessage(msg){
                     msg.reply("Invalid input number, must be called this way: atou [number]");
                 } else {
                     msg.react('👍');
-                    let dolares = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
-                    let compra = parseFloat(dolares.data[1].casa.compra);
-                    let venta = parseFloat(dolares.data[1].casa.venta);
+                    let dolares = await axios.get('https://dolar-api-argentina.vercel.app/v1/dolares');
+                    let compra = parseFloat(dolares.data[1].compra);
+                    let venta = parseFloat(dolares.data[1].venta);
                     let dolarblue = (compra + venta) / 2;
                     let arsToUsd = ars / dolarblue;
                     arsToUsd = parseFloat(arsToUsd.toFixed(2));
@@ -571,9 +567,9 @@ async function handleMessage(msg){
                     msg.reply("Invalid input number, must be called this way: utoa [number]");
                 } else {
                     msg.react('👍');
-                    let dolares = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
-                    let compra = parseFloat(dolares.data[1].casa.compra);
-                    let venta = parseFloat(dolares.data[1].casa.venta);
+                    let dolares = await axios.get('https://dolar-api-argentina.vercel.app/v1/dolares');
+                    let compra = parseFloat(dolares.data[1].compra);
+                    let venta = parseFloat(dolares.data[1].venta);
                     let dolarblue = (compra + venta) / 2;
                     let usdToArs = usd * dolarblue;
                     usdToArs = parseFloat(usdToArs.toFixed(2));
@@ -616,43 +612,33 @@ async function handleMessage(msg){
                 msg.reply(act.activity);
                 break;
             case 'dolares':
-                let dolares = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
+                let dolares = await axios.get('https://dolar-api-argentina.vercel.app/v1/dolares');
                 let dolaresData = dolares.data;
-                let dolaresStr = "DOLAR : COMPRA | VENTA\n";
+                let dolaresStr = "*CASA* : COMPRA | VENTA\n";
                 dolaresStr += "_____________________________________\n";
+                var date = moment(dolaresData[0].fechaActualizacion).utc().format('DD/MM/YYYY');
                 for (let i = 0; i < dolaresData.length; i++) {
                     const dolar = dolaresData[i];
-                    dolaresStr += `*${dolar.casa.nombre}* : ${dolar.casa.compra} | ${dolar.casa.venta}\n`;
+                    dolaresStr += `*${dolar.nombre}* : ${dolar.compra} | ${dolar.venta}\n`;
                     dolaresStr += "_____________________________________\n";
                 }
+                dolaresStr += `${date} \n`;
+                dolaresStr += "_Fuente: https://dolarhoy.com/_";
                 msg.reply(dolaresStr);
                 break;
-            case 'dolarb':
+            case 'dolar':
                 
-                let dolar = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
+                let dolar = await axios.get('https://dolar-api-argentina.vercel.app/v1/dolares');
                 let dolarData = dolar.data[1];
                 msg.reply(`
-                *${dolarData.casa.nombre}*
+                *${dolarData.nombre}*
 _____________________________________            
-Compra: *${dolarData.casa.compra}*         
+Compra: *${dolarData.compra}*         
 _____________________________________            
-Venta: *${dolarData.casa.venta}*       
+Venta: *${dolarData.venta}*       
 _____________________________________            
-
+_Fuente: https://dolarhoy.com/_
             `);
-                break;
-            case 'dolaroficial':
-                let dolarOficial = await axios.get('https://www.dolarsi.com/api/api.php?type=valoresprincipales');
-                let dolarOficialData = dolarOficial.data[0];
-                msg.reply(`
-                *${dolarOficialData.casa.nombre}*
-_____________________________________
-Compra: *${dolarOficialData.casa.compra}*
-_____________________________________
-Venta: *${dolarOficialData.casa.venta}*
-_____________________________________
-            
-                `);
                 break;
             case '!groupinfo':
                 let chat = await msg.getChat();
@@ -670,48 +656,50 @@ Participant count: ${chat.participants.length}
                 }
                 break;
             case '!help':
-                msg.reply(`
-                    *Comandos*
-______________________________________            
-*summa*: resume 200 msg's del chat         
-______________________________________           
-*summa [n]*: resume n msg's del chat       
-______________________________________           
-*resumi [chat]*: resume msg's de chat       
-______________________________________          
-*gpt [consulta]*: responde gpt     
-______________________________________            
-*texto*: traduce audio a texto     
-______________________________________            
-*gptaudio*: audio a gpt            
-______________________________________
-*randomize*: random activity
-______________________________________
-*log [n]*: muestra n msg's         
-______________________________________           
-*atou [number]*: ARS to USD
-______________________________________
-*utoa [number]*: USD to ARS
-______________________________________
-*dolares*: dolar info
-______________________________________
-*dolarB*: dolar blue info
-______________________________________
-*dolaroficial*: dolar oficial info
-______________________________________
-*reminder [fecha u hora]*: manda un mensaje cuando le especifiques
-______________________________________
-*!groupinfo*: info del grupo
-______________________________________
-*!help*: muestra este mensaje
-______________________________________
-                `);
+                help(msg);
                 break;
             default:
                 break;
         }
     }
     
+}
+
+function help(msg){
+    msg.reply(`
+                    *Comandos*
+_____________________________________            
+*summa*: resume 200 msg's del chat         
+_____________________________________            
+*summa [n]*: resume n msg's del chat       
+_____________________________________            
+*resumi [chat]*: resume msg's de chat       
+_____________________________________            
+*gpt [consulta]*: responde gpt     
+_____________________________________            
+*texto*: traduce audio a texto     
+_____________________________________            
+*gptaudio*: audio a gpt            
+_____________________________________
+*randomize*: random activity
+_____________________________________
+*log [n]*: muestra n msg's         
+_____________________________________            
+*atou [number]*: ARS to USD
+_____________________________________
+*utoa [number]*: USD to ARS
+_____________________________________
+*dolares*: dolar info
+_____________________________________
+*dolarB*: dolar blue info
+_____________________________________
+*dolaroficial*: dolar oficial info
+_____________________________________
+*!groupinfo*: info del grupo
+_____________________________________
+*!help*: muestra este mensaje
+_____________________________________
+                `);
 }
 /**
  * imprime en consola para que sea mas facil de leer
