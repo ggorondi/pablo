@@ -15,6 +15,7 @@ const FormData = require('form-data');
 const { exec } = require('child_process');
 const { rejects } = require('assert');
 const async = require('async');
+const schedule = require('node-schedule'); //para schedule cosas a futuro.
 
 /* ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
 
@@ -429,9 +430,46 @@ async function createSummary(amount, msg, fromChat){
     const senderId = sender.id._serialized;
     console.log(amount);
     const chatLog = await getMessageLog(amount, fromChat);
-    const gptPreambulo = 'Quiero que resumas la conversación que pongo a continuación manteniendo quien dijo que y que no se repitan las frases, mantenelo bien corto, menos de 100 palabras salteate detalles irrelevantes. También conta la cantidad de veces que alguien mandó mensajes por nombre de la gente que aprece asi "[nombre]" Y en un pequeño parrafo aparte poneme quien la cantidad de mensajes que mandó cada uno así y su humor así: [nombre] - numero de mensajes {humor}:\n';
+    const gptPreambulo = 'Quiero que resumas la conversación que pongo a continuación manteniendo quien dijo que y que no se repitan las frases, mantenelo bien corto, menos de 100 palabras. Salteate detalles irrelevantes. También conta la cantidad de veces que cada persona mandó mensajes por el nombre que aparece asi "[nombre]", Y en un pequeño parrafo aparte escribí la cantidad de mensajes que mandó cada uno y el humor promedio de sus mensajes con este formato: [nombre] - numero de mensajes {humor}:\n';
     runCompletion2(gptPreambulo + chatLog, "Sos un asistente que resume conversaciones.").then(result => sendPrivateMessage(senderId, result));      
 
+}
+/**
+ * le pide a chatgpt que analice y devuelva el datetime apropiado para el reminder
+ * @param {Date} currentDate
+ * @param {string} requestString 
+ * @param {msg} msg
+ */
+async function getReminderDatetime(currentDate, requestString, msg){
+    const sender = await msg.getContact();
+    const senderId = sender.id._serialized;
+    const gptPreambulo = 'You are a program that helps with creating a new datetime based on a specific request. The current datetime is exactly: "'+currentDate.toString()+'. Your response should be a new datetime, written in the same format, but based on this request for modification that is in spanish: "'+requestString+'". Assume the same year or month or day or hour or timezone if they are not explicitly specified in the modification. Respond with ONLY the datetime, in the same english format as the current time. Dont add any more text than the datetime.\n';
+    var newDate = await runCompletion2(gptPreambulo, "You are a simple computer program");    
+    console.log(currentDate.toString())  
+    console.log(newDate.toString());
+    try {
+        newDate = checkDateString(newDate);
+        return newDate;
+    }
+    catch (err) {
+        console.log("getReminderDateTime error: "+err)
+        throw err;
+    }
+}
+
+function checkDateString(dateString) {
+    const dateFormat = /^([a-z]{3}) ([a-z]{3}) (\d{2}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT([+-]\d{4}) \(([\w\s]+)\)$/i; //tiene que estar en este formato que es el Date.toString() format, los // delimitan el regex, el i señala case insensitive, ^ fija que este en el start, $ el final.
+    if (dateFormat.test(dateString)) {
+      return dateString;
+    } else {
+      throw new Error("Invalid date string format.");
+    }
+  }
+
+function apodoRandom(){ // (no inclusivo)
+    const strings = ['capitan atlantico', 'ministro de seguridad', 'arquitecto de ilusiones', 'capo', 'bestia', 'pedazo de sexy', 'corazon de melocoton', 'domador de gusanos', 'patron', 'jefe', 'batiman', 'lindo UwU'];
+    const randomIndex = Math.floor(Math.random() * strings.length);
+    return strings[randomIndex];
 }
 
 async function createImage(prompto){
@@ -542,6 +580,21 @@ async function handleMessage(msg){
                     msg.reply("USD to ARS: AR$" + usdToArs);
                 }
                 break;
+            case 'reminder':
+                let currDate = new Date();
+                try{
+                    let reminderDate = await getReminderDatetime(currDate, restOfStr, msg);
+                    schedule.scheduleJob(reminderDate, () => {
+                        msg.reply("aca esta tu recordatorio "+apodoRandom())
+                        msg.react('🫡');
+                        });
+                    msg.react('⏰');
+                }
+                catch(err){
+                    console.log('schedule reminder error: '+err);
+                    msg.react('☠️');
+                }
+                break;
             default:
                 break;
         }
@@ -619,37 +672,39 @@ Participant count: ${chat.participants.length}
             case '!help':
                 msg.reply(`
                     *Comandos*
-_____________________________________            
+______________________________________            
 *summa*: resume 200 msg's del chat         
-_____________________________________            
+______________________________________           
 *summa [n]*: resume n msg's del chat       
-_____________________________________            
+______________________________________           
 *resumi [chat]*: resume msg's de chat       
-_____________________________________            
+______________________________________          
 *gpt [consulta]*: responde gpt     
-_____________________________________            
+______________________________________            
 *texto*: traduce audio a texto     
-_____________________________________            
+______________________________________            
 *gptaudio*: audio a gpt            
-_____________________________________
+______________________________________
 *randomize*: random activity
-_____________________________________
+______________________________________
 *log [n]*: muestra n msg's         
-_____________________________________            
+______________________________________           
 *atou [number]*: ARS to USD
-_____________________________________
+______________________________________
 *utoa [number]*: USD to ARS
-_____________________________________
+______________________________________
 *dolares*: dolar info
-_____________________________________
+______________________________________
 *dolarB*: dolar blue info
-_____________________________________
+______________________________________
 *dolaroficial*: dolar oficial info
-_____________________________________
+______________________________________
+*reminder [fecha u hora]*: manda un mensaje cuando le especifiques
+______________________________________
 *!groupinfo*: info del grupo
-_____________________________________
+______________________________________
 *!help*: muestra este mensaje
-_____________________________________
+______________________________________
                 `);
                 break;
             default:
