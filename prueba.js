@@ -14,9 +14,30 @@ const async = require('async');
 const moment = require('moment');
 
 
-const {Wit, log} = require('node-wit');
+//const {Wit, log} = require('node-wit');
 
 
+async function query(data) {
+	const response = await fetch(
+		"https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
+		{
+			headers: { Authorization: "Bearer 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" },
+			method: "POST",
+			body: JSON.stringify(data),
+		}
+	);
+	const result = await response.blob();
+
+    const buffer  = Buffer.from(await result.arrayBuffer());
+    fs.writeFileSync('image.png', buffer);
+    return result;
+}
+query({"inputs": "Astronaut riding a horse"}).then((response) => {
+	
+});
+
+
+/*
 //https://www.dolarsi.com/api/api.php?type=valoresprincipales
 console.log("HOLA");
 
@@ -38,7 +59,7 @@ async function open(){
 
 }
 open();
-/* async function wordApi(word){
+ async function wordApi(word){
     console.log(moment('2019-11-03T05:00:00.000Z').utc().format('MM/DD/YYYY')) // 11/3/2019
 
 
