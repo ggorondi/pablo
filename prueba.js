@@ -13,30 +13,31 @@ const { rejects } = require('assert');
 const async = require('async');
 const moment = require('moment');
 
-
-//const {Wit, log} = require('node-wit');
-
-
-async function query(data) {
-	const response = await fetch(
-		"https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
-		{
-			headers: { Authorization: "Bearer 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" },
-			method: "POST",
-			body: JSON.stringify(data),
-		}
-	);
-	const result = await response.blob();
-
-    const buffer  = Buffer.from(await result.arrayBuffer());
-    fs.writeFileSync('image.png', buffer);
-    return result;
-}
-query({"inputs": "Astronaut riding a horse"}).then((response) => {
-	
+const configuration = new Configuration({
+    apiKey : process.env.OPENAI_API_KEY,
 });
+const openai = new OpenAIApi(configuration);
+//const {Wit, log} = require('node-wit');
+async function prueba(){
+    try{
+    const response = await openai.createImageVariation(
+        fs.createReadStream("temp.png"),
+        1,
+        "256x256"
+      );
+      const url = response.data.data[0].url;
+      console.log(url);
+      const img = await fetch(url);
+      const blob = await img.blob();
+      const buffer  = Buffer.from(await blob.arrayBuffer());
+      fs.writeFileSync('image.png', buffer);
+    }
+    catch(err){
+        console.log(err);
+    }
+}
 
-
+prueba();
 /*
 //https://www.dolarsi.com/api/api.php?type=valoresprincipales
 console.log("HOLA");

@@ -76,46 +76,87 @@ function getFirstWord(str) {
 }
 
 
+function separateNumberAndString(str) {
+    const regex = /^(\d+)\s*(.*)/; // regular expression to match the first number and the rest of the string
+    const matches = str.match(regex); // match the regular expression against the input string
+    if (matches) {
+      const num = parseInt(matches[1]); // convert the matched number string to an integer
+      const restOfString = matches[2].trim(); // get the rest of the string and remove any leading/trailing whitespace
+      return [num, restOfString]; // return the separated values as an array
+    } else {
+      return [null, str]; // return null if no number is found
+    }
+  }
+  
 
 /**
  * Decide que hacer con el mensaje
  * @param {msg} msg 
  */
 async function handleMessage(msg){
-    const [firstWord, restOfStr] = getFirstWord(msg.body);
     const chat = await msg.getChat();
-    if(chat.isGroup){
-        return;
+    
+    //check si no es un msj de forbidden chat
+    if(!msg.fromMe) {
+        if(miscModule.isForbiddenChat(chat.name)) {return;}
     }
+    
+    
+    const [firstWord, restOfStr] = getFirstWord(msg.body);
+    
+    
     if(restOfStr){ // si tiene otro parametro ademas de la primera  palabra
         switch (firstWord.toLowerCase()) {
-            case 'img':
-                msg.react('👍');
+            case 'img': // FUNCIONA
                 try{
-                    await imageModule.createImageHugging({"inputs": `${restOfStr}`});
-                    const imgMedia = MessageMedia.fromFilePath('image.png');
+                    msg.react('👍');
+                    const imgMedia = await imageModule.createImageHugging({"inputs": `${restOfStr}`}); // crea imagen en image.png
                     msg.reply(imgMedia);
-                    imageModule.deleteFile('image.png');
                 }
                 catch( err){
                     console.log(err);
                 }
                 break;
-            case 'summame':
-                const fromChat = await textModule.getChatByName(restOfStr);
-                if(fromChat){
+            case 'img2': // FUNCIONA
+                try{
                     msg.react('👍');
-                    textModule.createSummary(200, msg, fromChat);
+                    const imgMedia = await imageModule.createImageOpenAI(restOfStr); // crea imagen en image.png
+                    msg.reply(imgMedia);
+                }
+                catch( err){
+                    console.log(err);
+                }
+                break;
+            case 'summame': // FUNCIONA 
+                separateNumberAndString(restOfStr);
+                let amount;
+                let chatName = separateNumberAndString(restOfStr)[1];
+                if(separateNumberAndString(restOfStr)[0] === null){
+                    amount  = 30;
+                }
+                else{
+                    amount = separateNumberAndString(restOfStr)[0];
+                }
+                const clientChats = await client.getChats();
+                const fromChat = await textModule.getChatByName(clientChats, chatName);
+                if(fromChat){
+                    const sender = await msg.getContact();
+                    const senderID = sender.id._serialized;
+                    let result = await textModule.createSummary(amount, msg, fromChat);
+                    msg.react('👍');
+                    const toChat = await client.getChatById(senderID);
+                    toChat.sendMessage(result);
                 }
                 else{
                     msg.reply("Invalid input chat name, must be called this way: resumi [chatName]");
                 }
                 break;
-            case 'gpt':
+            
+            case 'gpt': // FUNCIONA
                 msg.react('👍');
                 textModule.runCompletion(restOfStr, "Sos un asistente que responde con simpleza y es muy inteligente").then(result => msg.reply(result));
                 break;
-            case 'log':
+            case '!log': // FUNCIONA
                 const chat = await msg.getChat();
                 const cantidad = Number(restOfStr);
                 if (isNaN(cantidad)) {
@@ -133,10 +174,11 @@ async function handleMessage(msg){
                     msg.reply("Invalid input number, must be called this way: summa [number]");
                 } else {
                     msg.react('👍');
-                    await textModule.createSummary(cantidadMsgs, msg, currChat);
+                    let result = await textModule.createSummary(cantidadMsgs, msg, currChat);
+                    msg.reply(result);
                 }
                 break;
-            case 'atou':
+            case 'atou':// FUNCIONA
                 let ars = Number(restOfStr);
                 if (isNaN(ars)) {
                     msg.reply("Invalid input number, must be called this way: atou [number]");
@@ -146,7 +188,7 @@ async function handleMessage(msg){
                     msg.reply("ARS to USD: U$D" + arsToUsd);
                 }
                 break;
-            case 'utoa':
+            case 'utoa': // FUNCIONA
                 let usd = Number(restOfStr);
                 if (isNaN(usd)) {
                     msg.reply("Invalid input number, must be called this way: utoa [number]");
@@ -156,10 +198,18 @@ async function handleMessage(msg){
                     msg.reply("USD to ARS: AR$" + usdToArs);
                 }
                 break;
-            case 'reminder':
+            case 'reminder':// FUNCIONA
                 let currDate = new Date();
                 try{
                     let reminderDate = await textModule.getReminderDatetime(currDate, restOfStr, msg);
+                    //const options = { day: '2-digit', month: 'short', year: 'numeric' };
+                    //const spanishDate = reminderDate.toLocaleDateString('es-ES', options); //no funciona
+                    var nowTime = new Date().getTime()
+                    if (reminderDate.getTime() <= nowTime) {
+                        msg.react('☠️');
+                        msg.reply("Especificá mejor cuando lo queres por favor!");
+                        break;
+                    }
                     msg.reply("Recordatorio creado para: "+ reminderDate);
                     schedule.scheduleJob(reminderDate, () => {
                         msg.reply("aca esta tu recordatorio "+ textModule.apodoRandom())
@@ -169,8 +219,17 @@ async function handleMessage(msg){
                 }
                 catch(err){
                     console.log('schedule reminder error: '+err);
+                    msg.reply("Especificá mejor cuando lo queres por favor!");
                     msg.react('☠️');
                 }
+                break;
+            case '!prohibir': // FUNCIONA
+                let chatAProhibir = restOfStr;
+                miscModule.pushToForbiddenChats(chatAProhibir);
+                break;
+            case '!desprohibir': // FUNCIONA
+                let chatAHabilitar = restOfStr;
+                miscModule.popFromForbiddenChats(chatAHabilitar);
                 break;
             default:
                 break;
@@ -178,38 +237,105 @@ async function handleMessage(msg){
     }
     else{ // si es un comando de solo una palabra
         switch (msg.body.toLowerCase()) {
-            case 'summa':
-                msg.react('👍');
-                await textModule.createSummaryWrapper(msg);
+            case 'variation':
+                if(msg.hasQuotedMsg){
+                    const quotedMsg = await msg.getQuotedMessage();
+                    msg.react('👍');
+                    let imgMedia = await imageModule.createVariationOpenAI(quotedMsg);
+                    if(imgMedia){
+                        msg.reply(imgMedia);
+                        //msg.reply( response[0].score + " : "+response[0].label);
+                    }
+                    else {
+                        msg.react('☠️');
+                        msg.reply("wtf esto no es una foto");
+                    }
+                }
                 break;
-            case 'texto':
+            case 'convert': 
+                if(msg.hasQuotedMsg){
+                    msg.react('👍');
+                    const quotedMsg = await msg.getQuotedMessage();
+                    let response = await imageModule.imageToPromptReplicate(quotedMsg);
+                    console.log(response);
+                    if(response){
+                        msg.reply(response);
+                        //msg.reply( response[0].score + " : "+response[0].label);
+                    }
+                    else {
+                        msg.reply("wtf esto no es una foto");
+                    }
+                }
+                break;
+            case 'sticker':
+                if(msg.hasQuotedMsg){
+                    msg.react('👍');
+                    const quotedMsg = await msg.getQuotedMessage();
+                    let imgBase64 = await downloadImg(quotedMsg);
+                    await createImage(imgBase64);
+                    msg.reply(response);
+                }
+                else {
+                    msg.reply("wtf esto no es una foto?");
+                }
+                break;
+            case 'yolo':
+                if(msg.hasQuotedMsg){
+                    msg.react('👍');
+                    const quotedMsg = await msg.getQuotedMessage();
+                    let response = await imageModule.imageToPromptReplicate(quotedMsg);
+                    console.log(response);
+                    if(response){
+                        msg.reply("img2 "+ response);
+                        //msg.reply( response[0].score + " : "+response[0].label);
+                    }
+                    else {
+                        msg.reply("wtf esto no es una foto");
+                    }
+                }
+                break;
+            case 'texto': // FUNCIONA
                 if(msg.hasQuotedMsg){
                     queue.push(msg);
                 }
                 break;
-            case 'randomize':
-                let response = await axios.get('https://www.boredapi.com/api/activity');
-                let act = response.data;
-                msg.reply(act.activity);
+            case 'summa':
+                msg.react('👍');
+                await textModule.createSummaryWrapper(msg);
                 break;
-            case 'dolares':
+            case 'randomize': // FUNCIONA
+                let response = await miscModule.randomizeActivity();
+                msg.reply(response);
+                break;
+            case 'dolares': // FUNCIONA
                 const dolaresStr = await miscModule.dolares();
                 msg.reply(dolaresStr);
                 break;
-            case 'dolar':
-                miscModule.dolar();
-                
+            case 'dolar':// FUNCIONA
+                const dolarStr = await miscModule.dolar();
+                msg.reply(dolarStr);
                 break;
-            case '!groupinfo':
+            case '!prohibidos':
+                const forbiddenChats = miscModule.getForbiddenChats();
+                let str = "Chats prohibidos-> ";
+                for (let i = 0; i < forbiddenChats.length; i++) {
+                    str+="|"+forbiddenChats[i];
+                }
+                str+="|";
+                msg.reply(str);
+                break;
+            case '!groupinfo': // FUNCIONA
                 let chat = await msg.getChat();
                 if (chat.isGroup) {
-                    miscModule.groupInfo(chat, msg);
+                    const groupInfoStr = miscModule.groupInfo(chat);
+                    msg.reply(groupInfoStr);
                 } else {
                     msg.reply('This command can only be used in a group!');
                 }
                 break;
-            case '!help':
-                help(msg);
+            case '!help': // FUNCIONA
+                const helpMsg =  miscModule.help();
+                msg.reply(helpMsg);
                 break;
             default:
                 break;
@@ -248,6 +374,7 @@ client.initialize();
 
 /**
  * TODO: 
+ * * CHUNKS para el  SUMMA
  * * chatGPT literalmente en un grupo privado (con todos los textos )
  * * presets de conversadores de gpt
  * * ver como implementar reminders, o exportar reminders a google calendar
