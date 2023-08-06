@@ -8,4 +8,6 @@ package-lock.json
 
 Dockerfile
 
+phone-number-*
+
 .dockerignore
