@@ -6,7 +6,7 @@ const miscModule = require('./src/misc');
 const dotenv = require("dotenv").config();
 const qrcode = require('qrcode-terminal');
 
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');// https://docs.wwebjs.dev/Chat.html 
+const { Client, LocalAuth,  Location, List, Buttons } = require('whatsapp-web.js');// https://docs.wwebjs.dev/Chat.html 
 const {Configuration, OpenAIApi} = require("openai");// https://platform.openai.com/docs/api-reference/introduction
 const async = require('async');
 const schedule = require('node-schedule'); //para schedule cosas a futuro.
@@ -23,6 +23,10 @@ const openai = new OpenAIApi(configuration);
  */
 const client = new Client({
     authStrategy: new LocalAuth(),
+    puppeteer: {
+        executablePath: '../../../opt/google/chrome/google-chrome',
+        headless: false
+      }
 });
 
 /**
@@ -44,17 +48,17 @@ client.on('ready', () => {
 
 const queue = async.queue(async (msg, callback) => {
     const transcript = await soundModule.getTranscript(msg);
-    if(transcript !== ""){
+    if(transcript){
         const msgLower = msg.body.toLowerCase();
         switch(msgLower){
             case "texto":
                 msg.react('👍');
                 msg.reply(transcript);
                 break;
-        case "audiogpt":
-            msg.react('👍');
-            textModule.runCompletion(transcript, "Sos un asistente que responde con simpleza y es muy inteligente").then(result => msg.reply(result));      
-            break;
+            case "audiogpt":
+                msg.react('👍');
+                textModule.runCompletion(transcript, "Sos un asistente que responde con simpleza y es muy inteligente").then(result => msg.reply(result));      
+                break; 
         }
     }
 
@@ -95,7 +99,6 @@ function separateNumberAndString(str) {
  */
 async function handleMessage(msg){
     const chat = await msg.getChat();
-    
     //check si no es un msj de forbidden chat
     if(!msg.fromMe) {
         if(miscModule.isForbiddenChat(chat.name)) {return;}
@@ -107,20 +110,48 @@ async function handleMessage(msg){
     
     if(restOfStr){ // si tiene otro parametro ademas de la primera  palabra
         switch (firstWord.toLowerCase()) {
-            case 'img': // FUNCIONA
+            case 'tts':
+                try {
+                    const audioMedia = await soundModule.textToSoundReplicate(restOfStr); 
+                    msg.react('👍');
+                    setTimeout(() => {
+                        client.sendMessage(chat.id, audioMedia);
+                    }, 20);
+                    console.log(audioMedia);
+
+                    msg.reply(audioMedia);
+                    //client.sendMessage(msg.from, audioMedia, { sendMediaAsSticker: false, replyToMsgId: msg.id._serialized }); // send audio as reply
+
+                    //msg.reply(audioMedia);
+                }
+                catch( err){
+                    console.log(err);
+                }
+                break;
+            case 'imgrep':
                 try{
                     msg.react('👍');
-                    const imgMedia = await imageModule.createImageHugging({"inputs": `${restOfStr}`}); // crea imagen en image.png
+                    const imgMedia = await imageModule.textToImageReplicate(restOfStr); // crea imagen en image.png
                     msg.reply(imgMedia);
                 }
                 catch( err){
                     console.log(err);
                 }
                 break;
-            case 'img2': // FUNCIONA
+            case 'imghug': // FUNCIONA
                 try{
                     msg.react('👍');
-                    const imgMedia = await imageModule.createImageOpenAI(restOfStr); // crea imagen en image.png
+                    const imgMedia = await imageModule.textToImageHugging({"inputs": `${restOfStr}`}); // crea imagen en image.png
+                    msg.reply(imgMedia);
+                }
+                catch( err){
+                    console.log(err);
+                }
+                break;
+            case 'imgope': // FUNCIONA
+                try{
+                    msg.react('👍');
+                    const imgMedia = await imageModule.textToImageOpenAI(restOfStr); // crea imagen en image.png
                     msg.reply(imgMedia);
                 }
                 catch( err){
@@ -136,6 +167,10 @@ async function handleMessage(msg){
                 }
                 else{
                     amount = separateNumberAndString(restOfStr)[0];
+                    if(amount < 1 || amount > 1000){
+                        msg.reply("Invalid input amount, must be between 1 and 1000");
+                        return;
+                    }
                 }
                 const clientChats = await client.getChats();
                 const fromChat = await textModule.getChatByName(clientChats, chatName);
@@ -159,19 +194,19 @@ async function handleMessage(msg){
             case '!log': // FUNCIONA
                 const chat = await msg.getChat();
                 const cantidad = Number(restOfStr);
-                if (isNaN(cantidad)) {
-                    msg.reply("Invalid input number, must be called this way: log [number]");
+                if (isNaN(cantidad) || cantidad < 1 || cantidad > 1000) {
+                    msg.reply("Invalid input number, must be called this way: !log [number] and the number of messages must be between 1 and 1000");
                 } else {
                     msg.react('👍');
-                    const reply = await textModule.getMessageLog(cantidad, chat);
-                    msg.reply("MessLog: " + reply);
+                    const [reply, tokenCount] = await textModule.getMessageLog(cantidad, chat);
+                    msg.reply("TokenCount: "+tokenCount+ " MessLog: " + reply);
                 }
                 break;
             case 'summa':
                 const currChat = await msg.getChat();
-                const cantidadMsgs=Number(restOfStr);
-                if (isNaN(cantidadMsgs)) {
-                    msg.reply("Invalid input number, must be called this way: summa [number]");
+                const cantidadMsgs= Number(restOfStr);
+                if (isNaN(cantidadMsgs)|| cantidadMsgs < 1 || cantidadMsgs > 500) {
+                    msg.reply("Invalid input number, must be called this way: summa [number] and the number of messages must be between 1 and 500");
                 } else {
                     msg.react('👍');
                     let result = await textModule.createSummary(cantidadMsgs, msg, currChat);
@@ -237,6 +272,9 @@ async function handleMessage(msg){
     }
     else{ // si es un comando de solo una palabra
         switch (msg.body.toLowerCase()) {
+            case 'prueba':
+                msg.reply("hola");
+                break;
             case 'variation':
                 if(msg.hasQuotedMsg){
                     const quotedMsg = await msg.getQuotedMessage();
@@ -271,9 +309,13 @@ async function handleMessage(msg){
                 if(msg.hasQuotedMsg){
                     msg.react('👍');
                     const quotedMsg = await msg.getQuotedMessage();
-                    let imgBase64 = await downloadImg(quotedMsg);
-                    await createImage(imgBase64);
-                    msg.reply(response);
+                    let stickerMedia = await imageModule.imageToSticker(quotedMsg);
+                    if(stickerMedia){
+                        client.sendMessage(msg.from, stickerMedia, { sendMediaAsSticker: true, replyToMsgId: msg.id._serialized }); 
+                    }
+                    else {
+                        msg.reply("wtf esto no es una foto?");
+                    }
                 }
                 else {
                     msg.reply("wtf esto no es una foto?");
@@ -286,7 +328,7 @@ async function handleMessage(msg){
                     let response = await imageModule.imageToPromptReplicate(quotedMsg);
                     console.log(response);
                     if(response){
-                        msg.reply("img2 "+ response);
+                        msg.reply("imghug "+ response);
                         //msg.reply( response[0].score + " : "+response[0].label);
                     }
                     else {
@@ -333,6 +375,32 @@ async function handleMessage(msg){
                     msg.reply('This command can only be used in a group!');
                 }
                 break;
+            case '!gif':
+                if(msg.hasQuotedMsg){
+                    msg.react('👍');
+                    const quotedMsg = await msg.getQuotedMessage();
+                    let stickerMedia = await imageModule.imageToSticker(quotedMsg);
+                    if(stickerMedia){
+                        client.sendMessage(msg.to, stickerMedia, {sendVideoAsGif: true, replyToMsgId: msg.id._serialized }); 
+                    }
+                    else {
+                        msg.reply("wtf esto no es una video?");
+                    }
+                }
+                else {
+                    msg.reply("wtf esto no es una video?");
+                }
+                break;
+                break;
+            case '!buttons':
+                let button = new Buttons('Button body', [{ body: 'bt1' }, { body: 'bt2' }, { body: 'bt3' }], 'title', 'footer');
+                client.sendMessage(msg.from, button);
+                break;
+            case '!list':
+                let sections = [{ title: 'Comandos disponibles', rows: [{ title: 'atou', description: '1000' }, { title: 'imghug' , description: 'a burning PC'}] }];
+                let list = new List('Comandos', 'Messirve', sections, 'Messirve', 'footer');
+                client.sendMessage(msg.to, list);
+                break;
             case '!help': // FUNCIONA
                 const helpMsg =  miscModule.help();
                 msg.reply(helpMsg);
@@ -354,7 +422,19 @@ async function printFormattedMsg(msg){
     const msgTo = await chat.name;
     const contactPushName = contact.pushname;
     const contactNumber = contact.number;
-    console.log('\x1b[90m{'+ `\x1b[31m[${contactNumber} : \x1b[34m${contactPushName}\x1b[31m]`+ `\x1b[90m --to-->` + ` \x1b[36m${msgTo}\x1b[31m `+`\x1b[90m:`+` \x1b[32m${msg.body}\x1b[31m`+'\x1b[90m}');
+    
+    const device = msg.deviceType;
+    const timestamp = new Date().getTime();  
+    const date = new Date(timestamp);
+
+    const options = {
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric'
+    };
+
+    const readableHour = date.toLocaleTimeString('en-US', options);
+    console.log(`${device} at ${readableHour}`+'\x1b[90m{'+ `\x1b[31m[${contactNumber} : \x1b[34m${contactPushName}\x1b[31m]`+ `\x1b[90m --to-->` + ` \x1b[36m${msgTo}\x1b[31m `+`\x1b[90m:`+` \x1b[32m${msg.body}\x1b[31m`+'\x1b[90m}');
 
 }
 client.on('message_create', async msg => {

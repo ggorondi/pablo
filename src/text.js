@@ -1,4 +1,5 @@
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');// https://docs.wwebjs.dev/Chat.html 
+const {encode, decode} = require('gpt-3-encoder') // https://www.npmjs.com/package/gpt-3-encoder
 
 
 /**
@@ -13,7 +14,7 @@ const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');// https:
  */
 async function createSummaryWrapper(msg){
     const chat = await msg.getChat();
-    await createSummary(200, msg,chat);
+    await createSummary(100, msg,chat);
 }
 /**
  * Crea resumen de chat de fromChat
@@ -22,6 +23,7 @@ async function createSummaryWrapper(msg){
  */
 async function createSummary(amount, msg, fromChat){
     const chatLog = await getMessageLog(amount, fromChat);
+
     const gptPreambulo = 'Quiero que resumas la conversación que pongo a continuación manteniendo quien dijo que y que no se repitan las frases, mantenelo bien corto, menos de 100 palabras. Salteate detalles irrelevantes. También conta la cantidad de veces que cada persona mandó mensajes por el nombre que aparece asi "[nombre]", Y en un pequeño parrafo aparte escribí la cantidad de mensajes que mandó cada uno y el humor promedio de sus mensajes con este formato: [nombre] - numero de mensajes {humor}:\n';
     let result = await runCompletion(gptPreambulo + chatLog, "Sos un asistente que resume conversaciones.");      
     return result;
@@ -151,7 +153,7 @@ function MySearchOptions(limit, fromMe) {
  */
 async function getMessageLog( amount, fromChat){
     try{
-        const mensajes = await fetchAmount(amount, fromChat);
+        const [mensajes, tokenCount] = await fetchAmount(amount, fromChat);
         let linea = new Array(amount);
         var contacto;
         var nombre;
@@ -174,7 +176,7 @@ async function getMessageLog( amount, fromChat){
             } 
         }
         //const concatMessages = mensajes.map(mensaje =>  mensaje.author + ": " +mensaje.body).join('\n');
-        return linea.join("\n");
+        return [linea.join("\n"), tokenCount];
     }
     catch(err){
         console.log('getMessageLog Error: ' + err.message);
@@ -195,13 +197,28 @@ async function fetchAmount( amount, fromChat){
         console.log(amount + " " + fromChat.name);
         const mensajes = await fromChat.fetchMessages(options);
         mensajes.splice(-1); //saca el ultimo mensaje (el que pidio el fetch o lo que sea)
-        return mensajes; // devuelve un conjunto de objetos message
+        const tokenCount = await calculateTokensInArrayOfMessages(mensajes);
+        console.log(`Total tokens: ${tokenCount}`);
+        return [mensajes, tokenCount]; // devuelve un conjunto de objetos message
+    
     }
     catch(err){
         console.log('fetch error: ' + err);
     }
     
 }
+async function calculateTokensInArrayOfMessages(mensajes) {
+    let tokenCount = 0;
+    const wordRegex = /\b\w+\b/g; // regular expression to match words
+  
+    for (const mensaje of mensajes) {
+      const words = mensaje.body.match(wordRegex) || []; // split message into words
+      tokenCount += words.length * 0.75; // add to token count
+    }
+  
+    return tokenCount;
+  }
+
 /**
  * Devuelve el chat con el nombre chatName  
  * @param {string} chatName 

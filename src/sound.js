@@ -1,121 +1,85 @@
 const fs = require('fs');// https://nodejs.org/api/fs.html
-const { exec } = require('child_process');
-const FormData = require('form-data');
-const path = require('path');
-const axios = require('axios');
+const Replicate = require('replicate');
+const replicate = new Replicate({
+    auth: process.env.REPLICATE_API_TOKEN,
+});
 
+const { Buffer } = require('buffer');
+const streamifier = require('streamifier');
+const { Configuration, OpenAIApi } = require("openai");
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+const openai = new OpenAIApi(configuration);
 
-/**
- * Busca el mensaje que contiene el audio y lo descarga (This function handles the
- * missing media in the chat by retrieving messages from the chat until the media is available)
- * @param {qmsg} quotedMsg 
- * @param {int} messageId 
- * @param {chat} chat 
- * @param {int} maxRetries 
- * @returns 
- */
-async function downloadQuotedMedia(quotedMsg, messageId, chat, maxRetries = 5) {
-	let attachmentData = null;
-	let counter = 10;
-  
-	while (!attachmentData && counter <= maxRetries) {
-	  try {
-		const quotedMsgArr = await chat.fetchMessages({ limit: counter });
-		for (let i = 0; i < quotedMsgArr.length; i++) {
-		  if (quotedMsgArr[i].id._serialized === messageId) {
-			attachmentData = await quotedMsg.downloadMedia();
-			break;
-		  }
-		}
-	  } catch (err) {
-		console.log(`Error fetching messages. Retrying in 5 seconds... (attempt ${counter}/${maxRetries})`);
-		await new Promise(resolve => setTimeout(resolve, 5000));
-	  }
-      
-	  counter++;
-	}
-	if (!attachmentData) {
-	  console.log(`Could not download quoted media after ${maxRetries} attempts.`);
-	}
-  
-	return attachmentData;
+const { MessageMedia } = require('whatsapp-web.js');// https://docs.wwebjs.dev/Chat.html
+const { spawn } = require('child_process');
 
-}
-/**
- * Crear los archivos de audio y de texto
- * @param {string} base64String 
- */
-async function createFiles(base64String){
-    const binaryString = Buffer.from(base64String, 'base64').toString('binary');
-    const pcmData = Buffer.from(binaryString, 'binary');
-    const inputFile = 'in.ogg';
-    const outputFile = 'out.mp3';
-
-    await new Promise((resolve, reject) => {
-        fs.writeFile(inputFile, pcmData, (err) => {
-            if (err) reject(err);
-            console.log('The OGG file has been saved!');
-            resolve();
-        });
-    });
-
-    const command = `ffmpeg -i ${inputFile} ${outputFile}`;
-
-    // Execute FFmpeg command
-    await new Promise((resolve, reject) => {
-        exec(command, (error, stdout, stderr) => {
-            if (error) {
-                console.log(`Error during conversion: ${error.message}`);
-                reject(error);
-                return;
-            }
-            console.log('Conversion complete');
-            resolve();
-        });
-    });
-
+async function convertOggToMp3Stream(oggBase64String) {
+    const oggBuffer = Buffer.from(oggBase64String, 'base64');
+    // Start FFmpeg process
+    const ffmpeg = spawn('ffmpeg', [
+        '-i', '-',     // read input from stdin
+        '-f', 'mp3',   // output format
+        '-'            // output to stdout
+    ]);
     
-}
-/**
- * Transcribe el audio a texto y lo devuelve
- * @param {msg} msg 
- * @returns 
- */
-async function SpeechToTextTranscript(msg) {
-    try {
-        msg.react('☠️');
-        const filePath = path.join(__dirname, "../out.mp3");
-        const model = 'whisper-1';
 
-        const formData = new FormData();
-        formData.append("model", model);
-        formData.append("file", fs.createReadStream(filePath));
-        console.log("Calling Whisper");
-        
-        const transcription = await new Promise(async (resolve, reject) => {
-            try {
-                const response = await axios.post("https://api.openai.com/v1/audio/transcriptions", formData,{
-                    headers: {
-                        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                        "Content-Type": `multipart/form-data; boundry=${formData._boundary}`,
-                    }
-                });
-                const text = response.data.text;
-                msg.react('🥳');
-                deleteFiles();
-                console.log(text);
-                resolve(text);
-            } catch (err) {
-                console.log("No tiene archivo");
-                reject(err);
-            }
+    // Send input to FFmpeg
+    ffmpeg.stdin.write(oggBuffer);
+    ffmpeg.stdin.end();
+    // Handle end of input
+    ffmpeg.on('close', () => {
+        ffmpeg.stdin.destroy();
+    });
+    // Return MP3 read stream
+    return ffmpeg.stdout;
+}
+
+async function speechToTextTranscript(base64data) {
+    try {
+        const mp3stream = await convertOggToMp3Stream(base64data);
+        const buffer = await streamToBuffer(mp3stream); // convert to buffer
+        const stream = streamifier.createReadStream(buffer); // create readable stream from buffer
+        const filePath = new Date().getTime() + '.mp3';
+    
+        // Pipe the stream to the file and wait for the write operation to complete
+        await new Promise((resolve, reject) => {
+            const fileStream = fs.createWriteStream(filePath);
+            fileStream.on('finish', resolve);
+            fileStream.on('error', reject);
+            stream.pipe(fileStream);
         });
-        
-        return transcription;
+    
+        const resp = await openai.createTranscription(
+            fs.createReadStream(filePath),
+            'whisper-1'
+        );
+        fs.unlinkSync(filePath);
+        const text = resp.data.text;
+        return text;
     } catch (err) {
-        deleteFiles();
+        fs.unlinkSync(filePath);
         console.error(err);
+        throw err;
     }
+  }
+  
+
+function streamToBuffer(stream) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    stream.on('data', (chunk) => {
+      chunks.push(chunk);
+    });
+    stream.on('end', () => {
+      const buffer = Buffer.concat(chunks);
+      resolve(buffer);
+    });
+    stream.on('error', (err) => {
+      reject(err);
+    });
+  });
 }
 
 /**
@@ -126,64 +90,42 @@ async function SpeechToTextTranscript(msg) {
  */
 async function getTranscript(message){
 
-    const chat = await message.getChat();
-    var ans = ""; // aca voy a guardar la respuesta de la api
-    // Here we check if the message has a quoted message
     const quotedMsg = await message.getQuotedMessage();
-    const messageId = quotedMsg.id._serialized	
 
     // Here we check if the message has media
     if (quotedMsg.hasMedia) {
-        // If is a voice message, we download it and send it to the api
         if (quotedMsg.type.includes("ptt") || quotedMsg.type.includes("audio")) {
-            
-            const maxRetries = 1000;
             message.react("😎");
-            const attachmentData = await downloadQuotedMedia(quotedMsg, messageId, chat, maxRetries);
+            const attachmentData = await quotedMsg.downloadMedia();
             message.react("😱");
-            if (attachmentData) {
-                await createFiles(attachmentData.data);
-                const transcriptionPromise = SpeechToTextTranscript(message);
-                ans = await transcriptionPromise;
+            if (attachmentData.data) {
+                const transcription = await speechToTextTranscript(attachmentData.data);
+                return transcription;
             } else {
                 message.reply("The file couldn't be fetched");
             }
-            
         }
     }
-    console.log("ans: " + ans);
-    return ans;
+    return;
 }
-/**
- * Borra los archivos de audio 
- */
-function deleteFiles(){
+
+async function textToSoundReplicate(prompt){
     try{
-        const file1 = 'in.ogg';
-
-        const file2 = 'out.mp3';
-
-        // delete the first file
-        fs.unlink(file1, (err) => {
-            if (err) throw err;
-            console.log('File 1 deleted successfully');
-        });
-
-        fs.unlink(file2, (err) => {
-            if (err) throw err;
-            console.log('File 2 deleted successfully');
-        });
+        const model = "haoheliu/audio-ldm:b61392adecdd660326fc9cfc5398182437dbe5e97b5decfb36e1a36de68b5b95";
+        const input = {
+            text: prompt,
+        };
+        const url = await replicate.run(model, { input });
+        console.log(url);
+        const audioMedia = await MessageMedia.fromUrl(url);
+        return audioMedia;
     }
-    catch(err){
-        console.log("No se pudo borrar los archivos");
+    catch (err){
+        console.log(err);
     }
 }
-
 
 module.exports = {
     getTranscript,
-    SpeechToTextTranscript,
-    createFiles,
-    downloadQuotedMedia,
-    deleteFiles
+    textToSoundReplicate
 };

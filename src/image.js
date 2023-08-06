@@ -11,24 +11,27 @@ const configuration = new Configuration({
 
 const replicate = new Replicate({
     auth: process.env.REPLICATE_API_TOKEN,
-  });
+});
 
 
 const openai = new OpenAIApi(configuration);
 
 
 // https://api-inference.huggingface.co/models/CompVis/stable-diffusion-v1-4
-//
-async function createImageHugging(data){
+
+
+async function textToImageHugging(data){
     try {
+        console.log("Sending image to HuggingFace API");
         const response = await fetch(
-            "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
+            "https://api-inference.huggingface.co/models/prompthero/openjourney",
             {
                 headers: { Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}` },
                 method: "POST",
                 body: JSON.stringify(data),
             }
 	    );
+        console.log("Image received from HuggingFace API");
         const result = await response.blob();
 
         const buffer  = Buffer.from(await result.arrayBuffer());
@@ -43,8 +46,9 @@ async function createImageHugging(data){
     }
 }   
 
-async function createImageOpenAI(prompto){
+async function textToImageOpenAI(prompto){
     try{
+        console.log("Sending image to OpenAI API");
         const prompt = prompto + " "; 
         const result = await openai.createImage({
             prompt, 
@@ -54,20 +58,41 @@ async function createImageOpenAI(prompto){
         });
         const url = result.data.data[0].url;
         console.log(url);
-        const img = await fetch(url);
-        const blob = await img.blob();
-        const buffer  = Buffer.from(await blob.arrayBuffer());
-        fs.writeFileSync('image.png', buffer);
-        const imgMedia = MessageMedia.fromFilePath('image.png');
-        deleteFile('image.png');
+        console.log("Image received from OpenAI API");
+        const media = MessageMedia.fromUrl(url);
+        return media;
+    }
+    catch (err){
+        console.log(err);
+        return;
+    }
+}
+
+//prompthero/openjourney:9936c2001faa2194a261c01381f90e65261879985476014a0a37a334593a05eb
+//tstramer/midjourney-diffusion:436b051ebd8f68d23e83d22de5e198e0995357afef113768c20f0b6fcef23c8b
+// ai-forever/kandinsky-2:601eea49d49003e6ea75a11527209c4f510a93e2112c969d548fbb45b9c4f19f
+async function textToImageReplicate(prompt){
+    try{
+        console.log("Sending image to Replicate API");
+        const model = "prompthero/openjourney:9936c2001faa2194a261c01381f90e65261879985476014a0a37a334593a05eb";
+        console.log(prompt);
+        const input = {
+            image: prompt,
+            guidance_scale: 14
+
+        };
+        console.log("Image received from Replicate API");
+        const url = await replicate.run(model, { input });
+        const imgMedia = await MessageMedia.fromUrl(url);
         return imgMedia;
     }
     catch (err){
         console.log(err);
     }
-    return;
+
 }
-async function formatImage(base64data){
+
+async function formatToSquareImage(base64data){
     const bufferData = Buffer.from(base64data, 'base64');
     const image = sharp(bufferData);
   
@@ -86,54 +111,42 @@ async function formatImage(base64data){
 }
 
 async function createVariationOpenAI(msg){
-    const base64Data = await downloadImg(msg);
-    if(!base64Data) return;
-    // Wrap createImage call in a promise
-    const squarePngFile = await formatImage(base64Data);
-    
+    try {
+        console.log("Sending image to OpenAI API");
+        const base64Data = await downloadImg(msg);
+        if(!base64Data) return;
+        // Wrap textToImage call in a promise
+        const squarePngFile = await formatToSquareImage(base64Data);
         
-    // Wait for createImage to finish before making OpenAI API call
-    msg.react('👍');
-
-    const response = await openai.createImageVariation(
-        fs.createReadStream(squarePngFile),
-        1,
-        "256x256"
-    );
-    deleteFile(squarePngFile);
-    
-    const url = response.data.data[0].url;
-    console.log(url);
-    const img = await fetch(url);
-    const blob = await img.blob();
-    const buffer  = Buffer.from(await blob.arrayBuffer());
-    const variationFile = new Date().getTime() + '.png';
-    fs.writeFileSync(variationFile, buffer);
-    const imgMedia = MessageMedia.fromFilePath(variationFile);
-    deleteFile(variationFile);
-    return imgMedia;
-}
-
-// NO FUNCIONA NI SE USA
-async function createImageReplicate(prompt){
-    try{
-        const model = "ai-forever/kandinsky-2:601eea49d49003e6ea75a11527209c4f510a93e2112c969d548fbb45b9c4f19f";
-        const input = {
-            image: prompt,
-        };
-        const output = await replicate.run(model, { input });
-
-        return output;
+            
+        // Wait for textToImage to finish before making OpenAI API call
+        msg.react('👍');
+        const response = await openai.createImageVariation(
+            fs.createReadStream(squarePngFile),
+            1,
+            "256x256"
+        );
+        console.log("Image received from OpenAI API");
+        deleteFile(squarePngFile);
+        
+        const url = response.data.data[0].url;
+        console.log(url);
+        const imgMedia = MessageMedia.fromUrl(url);
+        return imgMedia;
+            
     }
     catch (err){
+        deleteFile(squarePngFile);
         console.log(err);
+        return;
     }
-
 }
+
+
 function deleteFile(fileToDelete){
     fs.unlink(fileToDelete, (err) => {
         if (err) {
-          console.error(err)
+          console.error(err);
           return
         }
       })
@@ -174,9 +187,6 @@ async function translateImg(data){
  * @param {*} msg 
  * @returns 
  */
-
-
-
 async function imageToText(msg){ // https://huggingface.co/google/vit-base-patch16-224 
     try{
         const base64Data = await downloadImg(msg); //base64 img
@@ -222,13 +232,24 @@ async function imageToPromptReplicate(msg){
 }
 
 
+async function imageToSticker(msg){
+    try{
+        const imgMedia = await msg.downloadMedia();
+        return imgMedia;
+    }
+    catch (err){
+        console.log(err);
+        return;
+    }
+}
 
 module.exports = {
-    createImageHugging,
-    createImageOpenAI,
+    textToImageHugging,
+    textToImageOpenAI,
+    textToImageReplicate,
     imageToText,
     imageToPromptReplicate,
-    createImageReplicate,
     createVariationOpenAI,
+    imageToSticker,
     deleteFile
 }
