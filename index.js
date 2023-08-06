@@ -23,10 +23,6 @@ const openai = new OpenAIApi(configuration);
  */
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: {
-        executablePath: '../../../opt/google/chrome/google-chrome',
-        headless: false
-      }
 });
 
 /**
@@ -55,10 +51,6 @@ const queue = async.queue(async (msg, callback) => {
                 msg.react('👍');
                 msg.reply(transcript);
                 break;
-            case "audiogpt":
-                msg.react('👍');
-                textModule.runCompletion(transcript, "Sos un asistente que responde con simpleza y es muy inteligente").then(result => msg.reply(result));      
-                break; 
         }
     }
 
@@ -110,34 +102,6 @@ async function handleMessage(msg){
     
     if(restOfStr){ // si tiene otro parametro ademas de la primera  palabra
         switch (firstWord.toLowerCase()) {
-            case 'tts':
-                try {
-                    const audioMedia = await soundModule.textToSoundReplicate(restOfStr); 
-                    msg.react('👍');
-                    setTimeout(() => {
-                        client.sendMessage(chat.id, audioMedia);
-                    }, 20);
-                    console.log(audioMedia);
-
-                    msg.reply(audioMedia);
-                    //client.sendMessage(msg.from, audioMedia, { sendMediaAsSticker: false, replyToMsgId: msg.id._serialized }); // send audio as reply
-
-                    //msg.reply(audioMedia);
-                }
-                catch( err){
-                    console.log(err);
-                }
-                break;
-            case 'imgrep':
-                try{
-                    msg.react('👍');
-                    const imgMedia = await imageModule.textToImageReplicate(restOfStr); // crea imagen en image.png
-                    msg.reply(imgMedia);
-                }
-                catch( err){
-                    console.log(err);
-                }
-                break;
             case 'imghug': // FUNCIONA
                 try{
                     msg.react('👍');
@@ -158,7 +122,8 @@ async function handleMessage(msg){
                     console.log(err);
                 }
                 break;
-            case 'summame': // FUNCIONA 
+            case 'resumime': // FUNCIONA 
+                console.log("HOLAaaaaaaaa");
                 separateNumberAndString(restOfStr);
                 let amount;
                 let chatName = separateNumberAndString(restOfStr)[1];
@@ -179,11 +144,12 @@ async function handleMessage(msg){
                     const senderID = sender.id._serialized;
                     let result = await textModule.createSummary(amount, msg, fromChat);
                     msg.react('👍');
-                    const toChat = await client.getChatById(senderID);
-                    toChat.sendMessage(result);
+                    msg.reply(result);
+                    //const toChat = await client.getChatById(senderID);
+                    //toChat.sendMessage(result);
                 }
                 else{
-                    msg.reply("Invalid input chat name, must be called this way: resumi [chatName]");
+                    msg.reply("Invalid input chat name, must be called this way: resumime [chatName]");
                 }
                 break;
             
@@ -199,7 +165,7 @@ async function handleMessage(msg){
                 } else {
                     msg.react('👍');
                     const [reply, tokenCount] = await textModule.getMessageLog(cantidad, chat);
-                    msg.reply("TokenCount: "+tokenCount+ " MessLog: " + reply);
+                    msg.reply(reply);
                 }
                 break;
             case 'summa':
@@ -311,7 +277,7 @@ async function handleMessage(msg){
                     const quotedMsg = await msg.getQuotedMessage();
                     let stickerMedia = await imageModule.imageToSticker(quotedMsg);
                     if(stickerMedia){
-                        client.sendMessage(msg.from, stickerMedia, { sendMediaAsSticker: true, replyToMsgId: msg.id._serialized }); 
+                        client.sendMessage(msg.from, stickerMedia, { sendMediaAsSticker: true}); 
                     }
                     else {
                         msg.reply("wtf esto no es una foto?");
@@ -375,32 +341,6 @@ async function handleMessage(msg){
                     msg.reply('This command can only be used in a group!');
                 }
                 break;
-            case '!gif':
-                if(msg.hasQuotedMsg){
-                    msg.react('👍');
-                    const quotedMsg = await msg.getQuotedMessage();
-                    let stickerMedia = await imageModule.imageToSticker(quotedMsg);
-                    if(stickerMedia){
-                        client.sendMessage(msg.to, stickerMedia, {sendVideoAsGif: true, replyToMsgId: msg.id._serialized }); 
-                    }
-                    else {
-                        msg.reply("wtf esto no es una video?");
-                    }
-                }
-                else {
-                    msg.reply("wtf esto no es una video?");
-                }
-                break;
-                break;
-            case '!buttons':
-                let button = new Buttons('Button body', [{ body: 'bt1' }, { body: 'bt2' }, { body: 'bt3' }], 'title', 'footer');
-                client.sendMessage(msg.from, button);
-                break;
-            case '!list':
-                let sections = [{ title: 'Comandos disponibles', rows: [{ title: 'atou', description: '1000' }, { title: 'imghug' , description: 'a burning PC'}] }];
-                let list = new List('Comandos', 'Messirve', sections, 'Messirve', 'footer');
-                client.sendMessage(msg.to, list);
-                break;
             case '!help': // FUNCIONA
                 const helpMsg =  miscModule.help();
                 msg.reply(helpMsg);
@@ -439,13 +379,13 @@ async function printFormattedMsg(msg){
 }
 client.on('message_create', async msg => {
     if(msg.fromMe) {
-        printFormattedMsg(msg);
+        //printFormattedMsg(msg);
         handleMessage(msg);
     }
 });
 
 client.on('message' , async msg => {
-    printFormattedMsg(msg);
+    //printFormattedMsg(msg);
     handleMessage(msg); 
 });
 

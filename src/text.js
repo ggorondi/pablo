@@ -24,7 +24,7 @@ async function createSummaryWrapper(msg){
 async function createSummary(amount, msg, fromChat){
     const chatLog = await getMessageLog(amount, fromChat);
 
-    const gptPreambulo = 'Quiero que resumas la conversación que pongo a continuación manteniendo quien dijo que y que no se repitan las frases, mantenelo bien corto, menos de 100 palabras. Salteate detalles irrelevantes. También conta la cantidad de veces que cada persona mandó mensajes por el nombre que aparece asi "[nombre]", Y en un pequeño parrafo aparte escribí la cantidad de mensajes que mandó cada uno y el humor promedio de sus mensajes con este formato: [nombre] - numero de mensajes {humor}:\n';
+    const gptPreambulo = 'Quiero que resumas la conversación que pongo a continuación, en menos de 100 palabras. Salteate detalles irrelevantes. También conta la cantidad de veces que cada persona mandó mensajes por el nombre que aparece asi "[nombre]", Y en un pequeño parrafo aparte escribí la cantidad de mensajes que mandó cada uno y el humor promedio de sus mensajes con este formato: [nombre] - numero de mensajes {humor}:\n';
     let result = await runCompletion(gptPreambulo + chatLog, "Sos un asistente que resume conversaciones.");      
     return result;
 }
