@@ -22,7 +22,7 @@ This project aimed to enhance WhatsApp functionality using JavaScript and Node.j
 - Access free APIs like weather, stocks, and exchange rates directly from WhatsApp for quick information retrieval for specific purposes.
 
 ## Discontinuation
-Due to the unofficial and unsupported nature of the `whatsapp-web.js` module, this project has been discontinued. The module lacks stability, making it challenging to build and maintain a reliable product on top of it. Additionally, it encounters issues whenever WhatsApp is updated, further complicating the development process.
+Due to the unofficial and unsupported nature of the `whatsapp-web.js` module, this project has been discontinued. The module lacks stability, making it challenging to build and maintain a reliable product on top of it, as it sporadically encounters issues when WhatsApp is updated. More info about the module can be found at https://wwebjs.dev/guide/.
 
 ## Usage
 Since this project has been discontinued, it is no longer actively maintained or available for use. However, you may explore the codebase as a reference for similar projects.
