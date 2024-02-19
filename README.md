@@ -2,7 +2,7 @@
 
 **Note: This project has been discontinued.**
 
-This project aimed to enhance WhatsApp functionality using JavaScript and Node.js, leveraging the `whatsapp-web.js` module. It added various features to WhatsApp, such as integrating OpenAI API to access ChatGPT or DALL-E directly from WhatsApp messages, along with several custom features.
+This project aimed to enhance WhatsApp functionality using JavaScript and Node.js, leveraging the `whatsapp-web.js` module. It added various features to WhatsApp, such as integrating OpenAI API to access ChatGPT directly from WhatsApp messages, along with several custom features for increased productivity.
 
 ## Features
 
@@ -13,10 +13,10 @@ This project aimed to enhance WhatsApp functionality using JavaScript and Node.j
 - Summarize lengthy group chat messages for better readability and quick reference.
 
 ### Voice Notes to Text
-- Convert voice notes received on WhatsApp to text for easier consumption and searchability.
+- Convert voice notes received on WhatsApp to text for easier consumption.
 
 ### Text-Based Reminders
-- Create reminders by sending free-written text messages, which are parsed through ChatGPT for improved context and understanding.
+- Create reminders by sending free-written text messages in any chat, which are parsed through ChatGPT for improved context and understanding.
 
 ### Free APIs Integration
 - Access free APIs like weather, stocks, and exchange rates directly from WhatsApp for quick information retrieval for specific purposes.
